@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: Unlicense
+
+// `AccountService/Accounts`. One account, because the emulator authenticates
+// against a single htpasswd entry.
+
+// The id has to be the username, since a caller walks this list matching on
+// `UserName` before touching the member.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let base = req.path;
+    let user = match util::at(util::read_json_file("supermicro/facts.json")?, "BmcUsername")? {
+        Some(value) => value,
+        None => "admin",
+    };
+
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#ManagerAccountCollection.ManagerAccountCollection",
+        "Name": "Accounts Collection",
+        "Members": [ #{ "@odata.id": `${base}/${user}` } ],
+        "Members@odata.count": 1,
+    }).rewrite()?.log("info", true)
+}

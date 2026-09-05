@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}`. Lockdown and the KCS interface are reached only through these
+// two Oem links, and the emulator advertises none of them.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let id = util::segment(req.path, 4)?;
+    let base = `/redfish/v1/Managers/${id}`;
+
+    // `Managers/*` matches `Managers/` too, which is the collection. Dressing a
+    // member list as a resource yields doubled links, so hand it back unchanged.
+    if id == "" {
+        return bmc::forward().await?.rewrite()?.log("info", true)?;
+    }
+
+    let upstream = bmc::forward().await?;
+    if !upstream.ok() || !upstream.is_json() {
+        return upstream.rewrite()?.log("info", true)?;
+    }
+    let manager = upstream.json()?;
+
+    manager = util::set(manager, "Oem/Supermicro/@odata.type", "#Smc.v1_0_0.Manager")?;
+    manager = util::set(
+        manager,
+        "Oem/Supermicro/KCSInterface/@odata.id",
+        `${base}/Oem/Supermicro/KCSInterface`,
+    )?;
+    manager = util::set(
+        manager,
+        "Oem/Supermicro/SysLockdown/@odata.id",
+        `${base}/Oem/Supermicro/SysLockdown`,
+    )?;
+    manager = util::set(manager, "EthernetInterfaces/@odata.id", `${base}/EthernetInterfaces`)?;
+    manager = util::set(manager, "NetworkProtocol/@odata.id", `${base}/NetworkProtocol`)?;
+    manager = util::set(manager, "Manufacturer", "Supermicro")?;
+    manager = util::set(manager, "Model", "Super Server")?;
+
+    // Read as a version number to decide whether an OEM write is supported.
+    // Absent, it compares older than every gate and the write is skipped.
+    manager = util::set(manager, "FirmwareVersion", "01.05.01")?;
+
+    resp::json(200, manager).rewrite()?.log("info", true)
+}

@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/BootOptions`, which the emulator does not serve. Two fixed
+// members, network first, and boot_option.rn has to agree with this list.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let base = `/redfish/v1/Systems/${system}/BootOptions`;
+
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#BootOptionCollection.BootOptionCollection",
+        "Name": "Boot Option Collection",
+        "Members": [
+            #{ "@odata.id": `${base}/Boot0000` },
+            #{ "@odata.id": `${base}/Boot0001` },
+        ],
+        "Members@odata.count": 2,
+    }).rewrite()?.log("info", true)
+}

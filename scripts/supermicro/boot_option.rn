@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/BootOptions/{option}`. `Boot0000` is the network option, and its
+// `UefiDevicePath` is the only place a client reads the boot interface back out.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let option = util::segment(req.path, 6)?;
+    let base = `/redfish/v1/Systems/${system}/BootOptions/${option}`;
+
+    let settings = #{
+        "@odata.type": "#Settings.v1_3_5.Settings",
+        "SettingsObject": #{ "@odata.id": `${base}/Settings` },
+    };
+
+    if option == "Boot0001" {
+        return resp::json(200, #{
+            "@odata.id": base,
+            "@odata.type": "#BootOption.v1_0_4.BootOption",
+            "Id": option,
+            "Name": "Boot Option",
+            "BootOptionReference": option,
+            "DisplayName": "UEFI Hard Disk",
+            "BootOptionEnabled": true,
+            "UefiDevicePath": "PciRoot(0x0)/Pci(0x2,0x0)/Sata(0x0,0xFFFF,0x0)",
+            "@Redfish.Settings": settings,
+        }).rewrite()?.log("info", true)?;
+    }
+
+    // Anything else is the network option. A NIC that cannot be read leaves a
+    // valid path that matches no interface, rather than failing the request.
+    let colons = "00:00:00:00:00:00";
+    let interfaces = bmc::expand_or_empty(
+        `/redfish/v1/Systems/${system}/EthernetInterfaces`,
+        "Ethernet Interface Collection",
+    ).await?;
+    match util::at(interfaces, "Members/0/MACAddress")? {
+        Some(value) => {
+            if value is String {
+                colons = value.to_uppercase();
+            }
+        }
+        None => {}
+    }
+    let mac = colons.replace(":", "");
+
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#BootOption.v1_0_4.BootOption",
+        "Id": option,
+        "Name": "Boot Option",
+        "BootOptionReference": option,
+        // The boot interface is matched on this string rather than the device
+        // path, so it names a supported adapter and carries both MAC forms.
+        "DisplayName":
+            `UEFI HTTP IPv4 Nvidia Network Adapter - ${colons} (MAC:${mac})`,
+        "BootOptionEnabled": true,
+        "UefiDevicePath":
+            `PciRoot(0x0)/Pci(0x2,0x0)/MAC(${mac},0x1)/IPv4(0.0.0.0,0x0,DHCP,0.0.0.0,0.0.0.0,0.0.0.0)/Uri()`,
+        "@Redfish.Settings": settings,
+    }).rewrite()?.log("info", true)
+}

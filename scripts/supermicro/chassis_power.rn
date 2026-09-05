@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Chassis/{id}/Power`. Not a collection, so it cannot share the empty one.
+// An emulated chassis has no rails and no readings, and says so.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    resp::json(200, #{
+        "@odata.id": req.path,
+        "@odata.type": "#Power.v1_7_1.Power",
+        "Id": "Power",
+        "Name": "Power",
+        "PowerControl": [],
+        "PowerControl@odata.count": 0,
+        "Voltages": [],
+        "Voltages@odata.count": 0,
+        "PowerSupplies": [],
+        "PowerSupplies@odata.count": 0,
+    }).rewrite()?.log("info", true)
+}

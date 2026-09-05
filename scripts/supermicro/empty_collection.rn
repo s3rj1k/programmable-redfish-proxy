@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: Unlicense
+
+// Collections the emulator answers badly and a Redfish client expects to exist.
+// Registered on several routes, and the last path segment picks the type.
+
+// An empty collection reads as this machine having none, which is true. The
+// emulator instead 404s most of them and answers storage with a 500.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let kind = match util::segment(req.path, -1)? {
+        "Storage" => "#StorageCollection.StorageCollection",
+        "Memory" => "#MemoryCollection.MemoryCollection",
+        "LogServices" => "#LogServiceCollection.LogServiceCollection",
+        "Sensors" => "#SensorCollection.SensorCollection",
+        "NetworkAdapters" => "#NetworkAdapterCollection.NetworkAdapterCollection",
+        "Tasks" => "#TaskCollection.TaskCollection",
+        name => `#${name}Collection.${name}Collection`,
+    };
+
+    let collection = util::empty_collection(req.path, "Collection")?;
+    collection = util::set(collection, "@odata.type", kind)?;
+    resp::json(200, collection).rewrite()?.log("info", true)
+}

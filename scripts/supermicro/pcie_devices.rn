@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Chassis/{id}/PCIeDevices`, where Supermicro keeps them rather than under the
+// system. Membership comes from `supermicro/facts.json`, empty if it names none.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let base = req.path;
+    let facts = util::read_json_file("supermicro/facts.json")?;
+
+    let members = [];
+    let count = 0;
+    match util::at(facts, "PCIeDevices")? {
+        Some(devices) => {
+            for device in devices {
+                match util::at(device, "Id")? {
+                    Some(id) => {
+                        members.push(#{ "@odata.id": `${base}/${id}` });
+                        count += 1;
+                    }
+                    None => {}
+                }
+            }
+        }
+        None => {}
+    }
+
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#PCIeDeviceCollection.PCIeDeviceCollection",
+        "Name": "PCIe Device Collection",
+        "Members": members,
+        "Members@odata.count": count,
+    }).rewrite()?.log("info", true)
+}

@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/NetworkProtocol`. IPMI is configured out of band here, so
+// report it on and let a client skip the write the BMC would refuse.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/NetworkProtocol`,
+        "@odata.type": "#ManagerNetworkProtocol.v1_5_0.ManagerNetworkProtocol",
+        "Id": "NetworkProtocol",
+        "Name": "Manager Network Protocol",
+        "IPMI": #{ "ProtocolEnabled": true, "Port": 623 },
+    }).rewrite()?.log("info", true)
+}

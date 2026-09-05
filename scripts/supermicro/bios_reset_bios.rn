@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Bios/Actions/Bios.ResetBios`. The emulator serves this only under
+// the capitalised spelling, so the request is relayed there rather than faked.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    bmc::forward_with(
+        bmc::inbound()?.path(`/redfish/v1/Systems/${system}/BIOS/Actions/Bios.ResetBios`)?
+    ).await?.rewrite()?.log("info", true)
+}

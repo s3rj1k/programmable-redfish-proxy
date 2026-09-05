@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}`, carrying what the Supermicro path reads and the emulator does
+// not serve, being the matched serial, the settings link and a boot order.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let base = `/redfish/v1/Systems/${system}`;
+
+    // `Systems/*` matches `Systems/` too, which is the collection. Dressing a
+    // member list as a resource yields doubled links, so hand it back unchanged.
+    if system == "" {
+        return bmc::forward().await?.rewrite()?.log("info", true)?;
+    }
+
+    // A boot override is the only PATCH the emulator understands. Everything else
+    // is accepted and dropped rather than answered with an unactionable 400.
+    if req.method == "PATCH" {
+        let boot = #{};
+        let count = 0;
+        if req.is_json() {
+            match util::at(req.json()?, "Boot")? {
+                Some(fields) => {
+                    for entry in fields {
+                        // A JSON null arrives as the unit value, so an empty key
+                        // is dropped rather than relayed as null.
+                        match entry.1 {
+                            () => {}
+                            value => {
+                                if entry.0 == "BootSourceOverrideEnabled"
+                                    || entry.0 == "BootSourceOverrideTarget"
+                                    || entry.0 == "BootSourceOverrideMode"
+                                {
+                                    boot[entry.0] = value;
+                                    count += 1;
+                                }
+                                // The order is ours to keep, since relaying it
+                                // is rejected and dropping it misleads the caller.
+                                if entry.0 == "BootOrder" {
+                                    store::set(`supermicro/${system}/BootOrder`, value)?;
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+        if count == 0 {
+            // A write that only reordered has been applied to the store already.
+            return resp::status(204).log("info", true)?;
+        }
+        let reply = bmc::patch(base, #{ "Boot": boot }).await?;
+        // A successful PATCH comes back as an empty 204, which has no JSON to
+        // read. Only parse a body the reply actually declared.
+        if reply.is_json() {
+            return resp::json(reply.status(), reply.json()?).rewrite()?.log("info", true)?;
+        }
+        return resp::status(reply.status()).log("info", true)?;
+    }
+
+    let upstream = bmc::forward().await?;
+    if !upstream.ok() || !upstream.is_json() {
+        return upstream.rewrite()?.log("info", true)?;
+    }
+    let sys = upstream.json()?;
+
+    // The emulator leaves this blank, and so does plenty of Supermicro hardware.
+    // A machine is matched on exactly this string, so one has to be derived.
+    let blank = match util::at(sys, "SerialNumber")? {
+        Some(text) => if text is String { text.trim() == "" } else { true },
+        None => true,
+    };
+    if blank {
+        sys = util::set(sys, "SerialNumber", derive_serial(sys).await?)?;
+    }
+
+    // Supermicro hangs the pending copy off the resource itself rather than at
+    // a vendor path of its own.
+    sys = util::set(sys, "@Redfish.Settings/@odata.type", "#Settings.v1_3_5.Settings")?;
+    sys = util::set(sys, "@Redfish.Settings/SettingsObject/@odata.id", `${base}/Settings`)?;
+
+    // Boot-order logic stalls without the collection link, and resolves the
+    // order by matching each entry against a `BootOptionReference`.
+    sys = util::set(sys, "Boot/BootOptions/@odata.id", `${base}/BootOptions`)?;
+
+    // The BMC's own order wherever it reports one, since those names are the
+    // boot options it really has. The stub is only for a BMC without any.
+    let order = ["Boot0000", "Boot0001"];
+    match util::at(sys, "Boot/BootOrder")? {
+        Some(existing) => {
+            if existing is Vec {
+                if existing.len() != 0 {
+                    order = existing;
+                }
+            }
+        }
+        None => {}
+    }
+
+    // Non-empty either way, because an empty order sends a client down the OEM
+    // fixed-boot-order path, which this proxy 404s so a real override is used.
+    sys = util::set(sys, "Boot/BootOrder", store::get_or(`supermicro/${system}/BootOrder`, order)?)?;
+    sys = util::set(sys, "SecureBoot/@odata.id", `${base}/SecureBoot`)?;
+
+    // Serial over LAN is reported here rather than on the manager, and the check
+    // reads both the SSH block and the session limit, erroring if either is absent.
+    sys = util::set(sys, "SerialConsole/MaxConcurrentSessions", 1)?;
+    sys = util::set(sys, "SerialConsole/SSH/ServiceEnabled", true)?;
+    sys = util::set(sys, "SerialConsole/SSH/Port", 22)?;
+    sys = util::set(sys, "SerialConsole/IPMI/ServiceEnabled", true)?;
+    sys = util::set(sys, "SerialConsole/IPMI/Port", 623)?;
+
+    // The manufacturer is what a machine identity is hashed from, so it names
+    // the vendor this proxy emulates, not the emulator underneath.
+    sys = util::set(sys, "Manufacturer", "Supermicro")?;
+    sys = util::set(sys, "Model", "Super Server")?;
+
+    resp::json(200, sys).rewrite()?.log("info", true)
+}
+
+// The serial when the BMC reports none. UUID first, hyphens stripped and
+// uppercased, else a digest of address and manager id that cannot be read back.
+async fn derive_serial(sys) {
+    match util::at(sys, "UUID")? {
+        Some(uuid) => {
+            if uuid is String {
+                if uuid.trim() != "" {
+                    return Ok(uuid.replace("-", "").to_uppercase());
+                }
+            }
+        }
+        None => {}
+    }
+
+    let seed = `${bmc::address()?}${bmc::manager_id().await?}`;
+    Ok(util::sha256(seed).to_uppercase())
+}

@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/HostInterfaces/{id}`. One third of lockdown, alongside
+// `SysLockdown` and the KCS privilege, and all three must agree to read unlocked.
+
+// Stored like the other two, so disabling it and reading it back agree.
+// `InterfaceEnabled` has to be a real bool or the check errors.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    let id = util::segment(req.path, 6)?;
+    let key = `supermicro/${manager}/${id}/HostInterfaceEnabled`;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let seen = false;
+        if req.is_json() {
+            match util::at(req.json()?, "InterfaceEnabled")? {
+                Some(value) => {
+                    if value is bool {
+                        store::set(key, value)?;
+                        seen = true;
+                    }
+                }
+                None => {}
+            }
+        }
+        if !seen {
+            return resp::json(400, #{
+                "error": #{
+                    "code": "Base.1.0.GeneralError",
+                    "message": "InterfaceEnabled is required and must be a boolean",
+                },
+            }).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/HostInterfaces/${id}`,
+        "@odata.type": "#HostInterface.v1_3_0.HostInterface",
+        "Id": id,
+        "Name": "Host Interface",
+        "InterfaceEnabled": store::get_or(key, true)?,
+        "HostInterfaceType": "NetworkHostInterface",
+        "Status": #{ "State": "Enabled", "Health": "OK" },
+    }).rewrite()?.log("info", true)
+}

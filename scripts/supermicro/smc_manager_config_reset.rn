@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/Actions/Oem/SmcManagerConfig.Reset`, the vendor's factory reset.
+// The caller only ever sends `ClearConfig`, which means exactly what it says.
+
+// So the state this proxy holds is dropped rather than the request waved through,
+// because a reset that left lockdown in place is a lie the next read exposes.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    // By prefix, since the keys are namespaced per system and per manager and a
+    // reset cannot enumerate the members that wrote them.
+    store::remove_prefix("supermicro/")?;
+
+    resp::status(204).log("info", true)
+}

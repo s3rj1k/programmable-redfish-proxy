@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+# The action defaults RUSTFLAGS to deny warnings, which also covers
+# dependencies, so a new rustc lint in a third-party crate would fail us.
+
+# Warnings are denied on our own code through clippy instead.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Caching is built in, so no separate rust-cache step is needed.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+          rustflags: ""
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ""
+      # Named `--test e2e` rather than a bare `cargo test`, so a missing
+      # `tests/e2e.rs` fails the job instead of passing silently. There is no
+      # library target, so there are no unit tests or doc tests to run.
+      - name: End-to-end tests
+        run: cargo test --locked --test e2e
+
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ""
+      - run: cargo build --release --locked

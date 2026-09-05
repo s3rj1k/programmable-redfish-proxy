@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Chassis/{id}/PCIeDevices/{device}`. Inventory is keyed on `SerialNumber` and
+// `PartNumber`, so both come from `supermicro/facts.json` rather than per request.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let chassis = util::segment(req.path, 4)?;
+    let wanted = util::segment(req.path, 6)?;
+    let facts = util::read_json_file("supermicro/facts.json")?;
+
+    match util::at(facts, "PCIeDevices")? {
+        Some(devices) => {
+            for device in devices {
+                let id = match util::at(device, "Id")? {
+                    Some(value) => value,
+                    None => "",
+                };
+                if id == wanted {
+                    let out = util::set(
+                        device,
+                        "@odata.id",
+                        `/redfish/v1/Chassis/${chassis}/PCIeDevices/${wanted}`,
+                    )?;
+                    out = util::set(out, "@odata.type", "#PCIeDevice.v1_9_0.PCIeDevice")?;
+                    return resp::json(200, out).rewrite()?.log("info", true)?;
+                }
+            }
+        }
+        None => {}
+    }
+
+    resp::json(404, #{
+        "error": #{
+            "code": "Base.1.0.GeneralError",
+            "message": `no PCIe device ${wanted} in supermicro/facts.json`,
+        },
+    }).log("info", true)
+}

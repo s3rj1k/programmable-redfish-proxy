@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: Unlicense
+
+// `AccountService`. The emulator has none, so the whole resource is served here
+// and the lockout policy write is free to accept.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        return resp::status(204).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": "/redfish/v1/AccountService",
+        "@odata.type": "#AccountService.v1_5_0.AccountService",
+        "Id": "AccountService",
+        "Name": "Account Service",
+        "ServiceEnabled": true,
+        "AccountLockoutThreshold": 0,
+        "AccountLockoutDuration": 0,
+        "AccountLockoutCounterResetAfter": 0,
+        "Accounts": #{ "@odata.id": "/redfish/v1/AccountService/Accounts" },
+        "Status": #{ "State": "Enabled", "Health": "OK" },
+    }).rewrite()?.log("info", true)
+}

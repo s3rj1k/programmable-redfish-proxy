@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Chassis`, served shallow on purpose.
+
+// A client expands this hunting for an NVIDIA processor module, and finding one
+// sends the KCS writes elsewhere. Bare links make that probe answer no everywhere.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let upstream = bmc::forward().await?;
+    if !upstream.ok() || !upstream.is_json() {
+        return upstream.rewrite()?.log("info", true)?;
+    }
+    let collection = upstream.json()?;
+
+    let members = [];
+    let count = 0;
+    match util::at(collection, "Members")? {
+        Some(entries) => {
+            for entry in entries {
+                // Keep the identity and drop everything an expansion added.
+                match util::at(entry, "@odata.id")? {
+                    Some(id) => {
+                        members.push(#{ "@odata.id": id });
+                        count += 1;
+                    }
+                    None => {}
+                }
+            }
+        }
+        None => {}
+    }
+
+    collection = util::set(collection, "Members", members)?;
+    collection = util::set(collection, "Members@odata.count", count)?;
+
+    resp::json(200, collection).rewrite()?.log("info", true)
+}

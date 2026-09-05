@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/SerialInterfaces/{id}`. All nine fields are compared against the
+// vendor default, so this is one fixed document rather than a relayed one.
+
+// Read only in fact as well as here, because real firmware refuses a PATCH field
+// by field, so nothing is stored and a write changes nothing.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    let id = util::segment(req.path, 6)?;
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/SerialInterfaces/${id}`,
+        "@odata.type": "#SerialInterface.v1_1_0.SerialInterface",
+        "Id": id,
+        "Name": "Serial Interface",
+        "InterfaceEnabled": true,
+        "SignalType": "Rs232",
+        "BitRate": "115200",
+        "Parity": "None",
+        "DataBits": "8",
+        "StopBits": "1",
+        "FlowControl": "None",
+        "ConnectorType": "RJ45",
+        "PinOut": "Cyclades",
+    }).rewrite()?.log("info", true)
+}

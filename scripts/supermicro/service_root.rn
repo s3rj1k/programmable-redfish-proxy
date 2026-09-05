@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: Unlicense
+
+// `GET /redfish/v1`. The vendor is read anonymously and matched exactly, so
+// "Supermicro" is what makes a client take the Supermicro path at all.
+
+// Nothing below may call `bmc::system_id`, which needs a credential. The value is
+// stamped even when the emulator reports one, since the proxy makes the claim.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let upstream = bmc::forward().await?;
+    if upstream.ok() && upstream.is_json() {
+        let root = upstream.json()?;
+        root = util::set(root, "Vendor", "Supermicro")?;
+
+        // `Product` is read together with `Vendor`, and "GB NVL" alongside it
+        // selects a different vendor, so state it rather than inherit it.
+        root = util::set(root, "Product", "Super Server")?;
+
+        // A client falls back to the first key of `Oem` when `Vendor` is absent,
+        // so the block is replaced outright rather than merged into.
+        root = util::set(root, "Oem", #{
+            "Supermicro": #{ "@odata.type": "#Smc.v1_0_0.Smc" },
+        })?;
+        return resp::json(200, root).rewrite()?.log("info", true)?;
+    }
+
+    // The BMC refused the anonymous probe or answered with something that is not
+    // JSON. A synthesised root still names a vendor, which is why this is read.
+    resp::json(200, #{
+        "@odata.id": "/redfish/v1",
+        "@odata.type": "#ServiceRoot.v1_10_0.ServiceRoot",
+        "Id": "RootService",
+        "Name": "Root Service",
+        "RedfishVersion": "1.11.0",
+        "Vendor": "Supermicro",
+        "Product": "Super Server",
+        "Oem": #{ "Supermicro": #{ "@odata.type": "#Smc.v1_0_0.Smc" } },
+        "Systems": #{ "@odata.id": "/redfish/v1/Systems" },
+        "Chassis": #{ "@odata.id": "/redfish/v1/Chassis" },
+        "Managers": #{ "@odata.id": "/redfish/v1/Managers" },
+        "UpdateService": #{ "@odata.id": "/redfish/v1/UpdateService" },
+        "SessionService": #{ "@odata.id": "/redfish/v1/SessionService" },
+        "AccountService": #{ "@odata.id": "/redfish/v1/AccountService" },
+        "Links": #{
+            "Sessions": #{ "@odata.id": "/redfish/v1/SessionService/Sessions" },
+        },
+    }).rewrite()?.log("info", true)
+}

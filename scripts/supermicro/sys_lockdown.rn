@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/Oem/Supermicro/SysLockdown`, one of the two Oem resources that
+// exist only on this vendor. Backed by `store`, since a client writes then polls.
+
+// The store is process-lifetime, so a restart reports lockdown disabled again.
+// A BMC power cycle does the same, and locked-by-default would park a machine.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    let key = `supermicro/${manager}/SysLockdownEnabled`;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let seen = false;
+        if req.is_json() {
+            match util::at(req.json()?, "SysLockdownEnabled")? {
+                Some(value) => {
+                    if value is bool {
+                        store::set(key, value)?;
+                        seen = true;
+                    }
+                }
+                None => {}
+            }
+        }
+        if !seen {
+            return resp::json(400, #{
+                "error": #{
+                    "code": "Base.1.0.GeneralError",
+                    "message": "SysLockdownEnabled is required and must be a boolean",
+                },
+            }).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/Oem/Supermicro/SysLockdown`,
+        "@odata.type": "#SysLockdown.v1_0_0.SysLockdown",
+        "Id": "SysLockdown",
+        "Name": "System Lockdown",
+        "SysLockdownEnabled": store::get_or(key, false)?,
+    }).rewrite()?.log("info", true)
+}

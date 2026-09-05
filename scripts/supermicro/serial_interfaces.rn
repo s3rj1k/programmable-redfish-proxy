@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/SerialInterfaces`, read by the serial-console check and the
+// machine setup status. The emulator serves neither this nor its member.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let base = req.path;
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#SerialInterfaceCollection.SerialInterfaceCollection",
+        "Name": "Serial Interface Collection",
+        "Members": [ #{ "@odata.id": `${base}/1` } ],
+        "Members@odata.count": 1,
+    }).rewrite()?.log("info", true)
+}

@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: Unlicense
+
+// Handles every request no [[route]] claims, which is the proxy's default
+// behaviour. Nothing here is automatic, which is the point of the file.
+
+// `rewrite` swaps the BMC's authority for the proxy's. Drop it and the caller
+// learns the BMC address, then talks to it directly and bypasses this proxy.
+
+// `log::request` and `.log` are the only records the proxy emits. Drop them and
+// the request is served silently. Credentials are redacted either way.
+pub async fn handle(req) {
+    log::request("info", true)?;
+    bmc::forward().await?.rewrite()?.log("info", true)
+}

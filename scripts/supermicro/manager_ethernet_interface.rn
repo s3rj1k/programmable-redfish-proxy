@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/EthernetInterfaces/{id}`. The MAC comes from
+// `supermicro/facts.json` and equals the one the machine is registered under.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    let id = util::segment(req.path, 6)?;
+
+    let facts = util::read_json_file("supermicro/facts.json")?;
+    let mac = match util::at(facts, "BmcMacAddress")? {
+        Some(value) => value,
+        None => "",
+    };
+    if mac == "" {
+        return resp::json(500, #{
+            "error": #{
+                "code": "Base.1.0.GeneralError",
+                "message": "supermicro/facts.json has no BmcMacAddress",
+            },
+        }).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/EthernetInterfaces/${id}`,
+        "@odata.type": "#EthernetInterface.v1_6_0.EthernetInterface",
+        "Id": id,
+        "Name": "Manager Ethernet Interface",
+        "InterfaceEnabled": true,
+        "LinkStatus": "LinkUp",
+        "MACAddress": mac,
+        "PermanentMACAddress": mac,
+        "Status": #{ "State": "Enabled", "Health": "OK" },
+    }).rewrite()?.log("info", true)
+}

@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Chassis/{id}`. Supermicro hangs `PCIeDevices` here rather than off the system,
+// and the serial is the system's own so the fallback match still succeeds.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let id = util::segment(req.path, 4)?;
+
+    // `Chassis/*` matches `Chassis/` too, which is the collection. Dressing a
+    // member list as a resource yields doubled links and a bogus Manufacturer.
+    if id == "" {
+        return bmc::forward().await?.rewrite()?.log("info", true)?;
+    }
+
+    let upstream = bmc::forward().await?;
+    if !upstream.ok() || !upstream.is_json() {
+        return upstream.rewrite()?.log("info", true)?;
+    }
+    let chassis = upstream.json()?;
+
+    // Always the system's own, never the chassis's. An emulator hands out a
+    // sample serial here that names no machine, and a mismatch breaks the match.
+    chassis = util::set(chassis, "SerialNumber", derive_serial().await?)?;
+
+    chassis = util::set(
+        chassis, "PCIeDevices/@odata.id", `/redfish/v1/Chassis/${id}/PCIeDevices`)?;
+    chassis = util::set(chassis, "Manufacturer", "Supermicro")?;
+
+    resp::json(200, chassis).rewrite()?.log("info", true)
+}
+
+// Whatever systems.rn reports, in the same order, so the two agree. Serial,
+// then UUID, then a digest of address and manager id that cannot be read back.
+async fn derive_serial() {
+    let system = bmc::get(`/redfish/v1/Systems/${bmc::system_id().await?}`).await?;
+    if system.ok() && system.is_json() {
+        let sys = system.json()?;
+
+        match util::at(sys, "SerialNumber")? {
+            Some(text) => {
+                if text is String {
+                    if text.trim() != "" {
+                        return Ok(text);
+                    }
+                }
+            }
+            None => {}
+        }
+
+        match util::at(sys, "UUID")? {
+            Some(uuid) => {
+                if uuid is String {
+                    if uuid.trim() != "" {
+                        return Ok(uuid.replace("-", "").to_uppercase());
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+
+    let seed = `${bmc::address()?}${bmc::manager_id().await?}`;
+    Ok(util::sha256(seed).to_uppercase())
+}

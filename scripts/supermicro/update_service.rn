@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: Unlicense
+
+// `UpdateService`. The emulator serves a real one worth keeping, but with no
+// `FirmwareInventory` link, which is the only way a client reaches it.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let base = req.path;
+    let upstream = bmc::forward().await?;
+
+    let service = #{
+        "@odata.id": base,
+        "@odata.type": "#UpdateService.v1_11_0.UpdateService",
+        "Id": "UpdateService",
+        "Name": "Update Service",
+        "ServiceEnabled": true,
+    };
+    if upstream.ok() && upstream.is_json() {
+        service = upstream.json()?;
+    }
+
+    service = util::set(
+        service,
+        "FirmwareInventory/@odata.id",
+        "/redfish/v1/UpdateService/FirmwareInventory",
+    )?;
+
+    resp::json(200, service).rewrite()?.log("info", true)
+}

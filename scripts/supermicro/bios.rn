@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Bios`. The emulator registers this route in capitals and routes
+// case sensitively, so the caller's spelling is tried first and `BIOS` second.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+
+    // The resource is read only here and answers a write with 405. Attributes
+    // land in the pending copy, so a write is sent there instead.
+    if req.method == "PATCH" || req.method == "PUT" {
+        let written = bmc::forward_with(
+            bmc::inbound()?.path(`/redfish/v1/Systems/${system}/BIOS/Settings`)?
+        ).await?;
+        // Firmware that spells it `Bios` 404s the upper-case path, and the read
+        // path below already retries, so a write must too.
+        if written.status() == 404 {
+            written = bmc::forward_with(
+                bmc::inbound()?.path(`/redfish/v1/Systems/${system}/Bios/Settings`)?
+            ).await?;
+        }
+        return written.rewrite()?.log("info", true)?;
+    }
+
+    let reply = bmc::forward().await?;
+    if reply.status() == 404 {
+        reply = bmc::forward_with(
+            bmc::inbound()?.path(`/redfish/v1/Systems/${system}/BIOS`)?
+        ).await?;
+    }
+    if !reply.ok() || !reply.is_json() {
+        return reply.rewrite()?.log("info", true)?;
+    }
+
+    let bios = reply.json()?;
+    let id = match util::at(bios, "@odata.id")? {
+        Some(value) => value,
+        None => `/redfish/v1/Systems/${system}/Bios`,
+    };
+    // The TPM attribute the setup step reads before it configures anything.
+    // Absent, it refuses outright, so an emulator with no TPM still names it.
+    match util::at(bios, "Attributes/SecurityDeviceSupport")? {
+        Some(_) => {}
+        None => {
+            bios = util::set(bios, "Attributes/SecurityDeviceSupport", "Enabled")?;
+        }
+    }
+
+    bios = util::set(bios, "@Redfish.Settings/@odata.type", "#Settings.v1_3_5.Settings")?;
+    bios = util::set(bios, "@Redfish.Settings/SettingsObject/@odata.id", `${id}/Settings`)?;
+
+    resp::json(200, bios).rewrite()?.log("info", true)
+}

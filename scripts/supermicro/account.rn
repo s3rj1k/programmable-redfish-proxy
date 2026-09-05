@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: Unlicense
+
+// `AccountService/Accounts/{id}`. Readable, and deliberately not writable where
+// the password is concerned.
+
+// The credential lives in an htpasswd file this proxy cannot reach, so accepting
+// a change would have the caller record one the BMC goes on rejecting.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let id = util::segment(req.path, -1)?;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let password = false;
+        if req.is_json() {
+            match util::at(req.json()?, "Password")? {
+                Some(_) => { password = true; }
+                None => {}
+            }
+        }
+        if password {
+            return resp::json(501, #{
+                "error": #{
+                    "code": "Base.1.0.ActionNotSupported",
+                    "message": "the BMC credential is held outside this proxy and \
+                                cannot be rotated through it; retain the existing \
+                                credential instead",
+                },
+            }).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/AccountService/Accounts/${id}`,
+        "@odata.type": "#ManagerAccount.v1_4_0.ManagerAccount",
+        "Id": id,
+        "Name": "User Account",
+        "UserName": id,
+        "RoleId": "Administrator",
+        "Enabled": true,
+        "Locked": false,
+    }).rewrite()?.log("info", true)
+}

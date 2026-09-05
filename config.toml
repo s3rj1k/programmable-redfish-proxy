@@ -1,0 +1,244 @@
+# Every key is mandatory unless marked OPTIONAL. One instance fronts one BMC.
+#
+# The routes make a plain Redfish emulator look like a simple Supermicro.
+# Installed as it stands, so edit here and reinstall.
+
+listen = "0.0.0.0:8000"
+
+[tls]
+
+# OPTIONAL. With neither set the proxy mints its own at startup. Set both to
+# serve your own, since setting one is refused.
+#
+# cert_path = "/etc/programmable-redfish-proxy/tls/cert.pem"
+# key_path  = "/etc/programmable-redfish-proxy/tls/key.pem"
+
+[target]
+
+# The one BMC this instance fronts.
+address = "10.42.71.103:8000"
+
+# sushy reissues a self-signed certificate on every provision.
+accept_invalid_certs = true
+
+# One bound for a whole request, wide enough for a virtual-media fetch.
+timeout = "120s"
+
+[rewrite]
+
+# Every rewritten link points here, so it has to be the address clients dial.
+external_base_url = "https://10.42.71.101:8000"
+
+[logging]
+
+level      = "info"
+timestamps = true
+
+[rune]
+
+script_dir     = "/etc/programmable-redfish-proxy/scripts"
+
+# Everything no route below claims is relayed unchanged.
+default_script = "passthrough.rn"
+
+# env_allow stays unset, so a script sees no environment. Deployment facts are
+# in supermicro/facts.json.
+
+# Routes. Precedence is literal-prefix length then declaration order, and `*`
+# matches one segment without crossing a slash, so `x/` needs its own route.
+#
+# Each may take an OPTIONAL `method` list, absent meaning any method.
+#   method = ["GET"]
+[[route]]
+path   = "/redfish/v1"
+script = "supermicro/service_root.rn"
+
+[[route]]
+path   = "/redfish/v1/"
+script = "supermicro/service_root.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*"
+script = "supermicro/systems.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/"
+script = "supermicro/systems.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Settings"
+script = "supermicro/system_settings.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/SecureBoot"
+script = "supermicro/secure_boot.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/BootOptions"
+script = "supermicro/boot_options.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/BootOptions/*"
+script = "supermicro/boot_option.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/BootOptions/*/Settings"
+script = "supermicro/boot_option_settings.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Bios"
+script = "supermicro/bios.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Bios/Settings"
+script = "supermicro/bios_settings.rn"
+
+# Must precede `Chassis/*`, which ties on prefix length and loses on order.
+[[route]]
+path   = "/redfish/v1/Chassis"
+script = "supermicro/chassis_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/"
+script = "supermicro/chassis_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*"
+script = "supermicro/chassis.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/"
+script = "supermicro/chassis.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/PCIeDevices"
+script = "supermicro/pcie_devices.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/PCIeDevices/*"
+script = "supermicro/pcie_device.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*"
+script = "supermicro/manager.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/"
+script = "supermicro/manager.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/NetworkProtocol"
+script = "supermicro/network_protocol.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/EthernetInterfaces"
+script = "supermicro/manager_ethernet_interfaces.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/EthernetInterfaces/*"
+script = "supermicro/manager_ethernet_interface.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/SerialInterfaces"
+script = "supermicro/serial_interfaces.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/SerialInterfaces/*"
+script = "supermicro/serial_interface.rn"
+
+# Lockdown is read as these four together.
+[[route]]
+path   = "/redfish/v1/Managers/*/HostInterfaces"
+script = "supermicro/host_interfaces.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/HostInterfaces/*"
+script = "supermicro/host_interface.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/Oem/Supermicro/SysLockdown"
+script = "supermicro/sys_lockdown.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/Oem/Supermicro/KCSInterface"
+script = "supermicro/kcs_interface.rn"
+
+[[route]]
+path   = "/redfish/v1/UpdateService"
+script = "supermicro/update_service.rn"
+
+[[route]]
+path   = "/redfish/v1/UpdateService/FirmwareInventory"
+script = "supermicro/firmware_inventory.rn"
+
+# Actions.
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Bios/Actions/Bios.ChangePassword"
+script = "supermicro/bios_change_password.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Bios/Actions/Bios.ResetBios"
+script = "supermicro/bios_reset_bios.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Actions/Oem/OemSystemExtensions.Reset"
+script = "supermicro/oem_system_reset.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/Actions/Manager.Reset"
+script = "supermicro/manager_reset.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/Actions/Manager.ResetToDefaults"
+script = "supermicro/manager_reset.rn"
+
+[[route]]
+path   = "/redfish/v1/Managers/*/Actions/Oem/SmcManagerConfig.Reset"
+script = "supermicro/smc_manager_config_reset.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Bios/SD"
+script = "supermicro/bios_sd.rn"
+
+# The account service, where a password write is refused.
+[[route]]
+path   = "/redfish/v1/AccountService"
+script = "supermicro/account_service.rn"
+
+[[route]]
+path   = "/redfish/v1/AccountService/Accounts"
+script = "supermicro/accounts.rn"
+
+[[route]]
+path   = "/redfish/v1/AccountService/Accounts/*"
+script = "supermicro/account.rn"
+
+# Collections the emulator answers badly.
+[[route]]
+path   = "/redfish/v1/Systems/*/Storage"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/Memory"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Systems/*/LogServices"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/Sensors"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/NetworkAdapters"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/TaskService/Tasks"
+script = "supermicro/empty_collection.rn"
+
+[[route]]
+path   = "/redfish/v1/Chassis/*/Power"
+script = "supermicro/chassis_power.rn"

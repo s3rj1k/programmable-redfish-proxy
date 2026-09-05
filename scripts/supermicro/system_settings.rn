@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Settings`, the Supermicro settings shape. Nothing is deferred,
+// so the pending copy always reads back as the running one.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let base = `/redfish/v1/Systems/${system}`;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let boot = #{};
+        let count = 0;
+        if req.is_json() {
+            match util::at(req.json()?, "Boot")? {
+                Some(fields) => {
+                    for entry in fields {
+                        match entry.1 {
+                            () => {}
+                            value => {
+                                if entry.0 == "BootSourceOverrideEnabled"
+                                    || entry.0 == "BootSourceOverrideTarget"
+                                    || entry.0 == "BootSourceOverrideMode"
+                                {
+                                    boot[entry.0] = value;
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+        if count > 0 {
+            let reply = bmc::patch(base, #{ "Boot": boot }).await?;
+            // The status either way. A rejection with no JSON body is still a
+            // rejection, and reporting 204 would claim the write landed.
+            if reply.is_json() {
+                return resp::json(reply.status(), reply.json()?).rewrite()?.log("info", true)?;
+            }
+            return resp::status(reply.status()).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    let current = bmc::get(base).await?;
+    let boot = #{};
+    if current.ok() && current.is_json() {
+        match util::at(current.json()?, "Boot")? {
+            Some(value) => { boot = value; }
+            None => {}
+        }
+    }
+    boot = util::set(boot, "BootOrder", ["Boot0000", "Boot0001"])?;
+    boot = util::set(boot, "BootOptions/@odata.id", `${base}/BootOptions`)?;
+
+    resp::json(200, #{
+        "@odata.id": `${base}/Settings`,
+        "@odata.type": "#ComputerSystem.v1_20_0.ComputerSystem",
+        "Id": "Settings",
+        "Name": "System Settings",
+        "Boot": boot,
+    }).rewrite()?.log("info", true)
+}

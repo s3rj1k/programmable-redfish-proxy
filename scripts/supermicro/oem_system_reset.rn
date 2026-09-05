@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Actions/Oem/OemSystemExtensions.Reset`, the vendor AC power
+// cycle. The emulator has no such action but it does have a real reset.
+
+// Translated rather than stubbed, because a power cycle that cycles nothing
+// strands a caller waiting for the machine to come back.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let reply = bmc::post(
+        `/redfish/v1/Systems/${system}/Actions/ComputerSystem.Reset`,
+        #{ "ResetType": "ForceRestart" },
+    ).await?;
+
+    if !reply.ok() {
+        return resp::json(reply.status(), #{
+            "error": #{
+                "code": "Base.1.0.GeneralError",
+                "message": `the underlying reset was refused with ${reply.status()}`,
+            },
+        }).log("info", true)?;
+    }
+    resp::status(204).log("info", true)
+}

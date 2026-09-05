@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/HostInterfaces`, the third resource the lockdown check reads.
+// Exactly one member, since the caller refuses a collection of any other size.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let base = req.path;
+    resp::json(200, #{
+        "@odata.id": base,
+        "@odata.type": "#HostInterfaceCollection.HostInterfaceCollection",
+        "Name": "Host Interface Collection",
+        "Members": [ #{ "@odata.id": `${base}/Self` } ],
+        "Members@odata.count": 1,
+    }).rewrite()?.log("info", true)
+}

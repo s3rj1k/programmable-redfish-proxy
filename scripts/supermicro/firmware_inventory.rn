@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Unlicense
+
+// `UpdateService/FirmwareInventory`, which the emulator 404s. `empty_collection`
+// omits `@odata.type`, which a client dispatching on the type needs.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let collection = util::empty_collection(req.path, "Firmware Inventory Collection")?;
+    collection = util::set(
+        collection,
+        "@odata.type",
+        "#SoftwareInventoryCollection.SoftwareInventoryCollection",
+    )?;
+
+    resp::json(200, collection).rewrite()?.log("info", true)
+}

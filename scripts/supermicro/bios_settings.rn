@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Bios/Settings`, an alias onto the capitalised route the emulator
+// registers. Both verbs relay, since the write is applied upstream.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+
+    let reply = bmc::forward().await?;
+    if reply.status() == 404 {
+        reply = bmc::forward_with(
+            bmc::inbound()?.path(`/redfish/v1/Systems/${system}/BIOS/Settings`)?
+        ).await?;
+    }
+    reply.rewrite()?.log("info", true)
+}

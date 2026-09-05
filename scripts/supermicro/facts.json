@@ -1,0 +1,20 @@
+{
+    "BmcMacAddress": "02:00:00:00:00:01",
+    "BmcUsername": "admin",
+    "PCIeDevices": [
+        {
+            "Id": "PCIeDevice0",
+            "Name": "Ethernet Controller",
+            "Description": "Emulated virtio network device",
+            "Manufacturer": "Red Hat, Inc.",
+            "PartNumber": "VIRTIO-NET-1AF4",
+            "SerialNumber": "VIRT0000000001",
+            "FirmwareVersion": "0.0.0",
+            "DeviceType": "SingleFunction",
+            "Status": {
+                "State": "Enabled",
+                "Health": "OK"
+            }
+        }
+    ]
+}

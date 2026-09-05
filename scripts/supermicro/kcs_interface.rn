@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/Oem/Supermicro/KCSInterface`, the other vendor-only Oem resource.
+// Stored rather than pinned, since a restricted privilege reads as half-locked.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let manager = util::segment(req.path, 4)?;
+    let key = `supermicro/${manager}/KCSPrivilege`;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let seen = false;
+        if req.is_json() {
+            match util::at(req.json()?, "Privilege")? {
+                Some(value) => {
+                    // Only the four the vendor defines. A caller reads this back
+                    // and refuses to parse anything else, which stalls a machine.
+                    if value is String {
+                        if value == "Administrator" || value == "Operator"
+                            || value == "User" || value == "Callback" {
+                            store::set(key, value)?;
+                            seen = true;
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+        if !seen {
+            return resp::json(400, #{
+                "error": #{
+                    "code": "Base.1.0.GeneralError",
+                    "message": "Privilege must be Administrator, Operator, User or Callback",
+                },
+            }).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Managers/${manager}/Oem/Supermicro/KCSInterface`,
+        "@odata.type": "#KCSInterface.v1_0_0.KCSInterface",
+        "Id": "KCSInterface",
+        "Name": "KCS Interface",
+        "Privilege": store::get_or(key, "Administrator")?,
+    }).rewrite()?.log("info", true)
+}

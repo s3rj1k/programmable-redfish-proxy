@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/SecureBoot`, answered here whatever the BMC has. An emulator
+// reports a state it cannot apply, so relaying it would report someone else's.
+
+// Backed by `store`, so this proxy is the BMC that supports the write. A
+// disable is read back as a disable rather than reverting on the next read.
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let key = `supermicro/${system}/SecureBootEnable`;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        let seen = false;
+        if req.is_json() {
+            match util::at(req.json()?, "SecureBootEnable")? {
+                Some(value) => {
+                    if value is bool {
+                        store::set(key, value)?;
+                        seen = true;
+                    }
+                }
+                None => {}
+            }
+        }
+        if !seen {
+            return resp::json(400, #{
+                "error": #{
+                    "code": "Base.1.0.GeneralError",
+                    "message": "SecureBootEnable is required and must be a boolean",
+                },
+            }).log("info", true)?;
+        }
+        return resp::status(204).log("info", true)?;
+    }
+
+    // Off by default, which is what lets an unsigned netboot image run. Both
+    // state fields are mandatory or a client fails the whole exploration.
+    let enabled = store::get_or(key, false)?;
+    let current = if enabled { "Enabled" } else { "Disabled" };
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Systems/${system}/SecureBoot`,
+        "@odata.type": "#SecureBoot.v1_1_0.SecureBoot",
+        "Id": "SecureBoot",
+        "Name": "UEFI Secure Boot",
+        "SecureBootEnable": enabled,
+        "SecureBootCurrentBoot": current,
+        "SecureBootMode": "UserMode",
+    }).rewrite()?.log("info", true)
+}

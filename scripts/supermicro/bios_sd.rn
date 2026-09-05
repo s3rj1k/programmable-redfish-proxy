@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/Bios/SD`, where this vendor keeps pending BIOS attributes. Both
+// verbs go to the capitalised settings resource, where bios.rn writes them.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    let system = util::segment(req.path, 4)?;
+    let reply = bmc::forward_with(
+        bmc::inbound()?.path(`/redfish/v1/Systems/${system}/BIOS/Settings`)?
+    ).await?;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        return reply.rewrite()?.log("info", true)?;
+    }
+
+    // A missing `Attributes` key reads as nothing pending, but a 404 fails the
+    // caller outright. Answer the empty shape instead.
+    if !reply.ok() || !reply.is_json() {
+        return resp::json(200, #{
+            "@odata.id": req.path,
+            "@odata.type": "#Bios.v1_1_0.Bios",
+            "Id": "SD",
+            "Name": "BIOS Pending Settings",
+            "Attributes": #{},
+        }).rewrite()?.log("info", true)?;
+    }
+
+    let pending = reply.json()?;
+    match util::at(pending, "Attributes")? {
+        Some(_) => {}
+        None => { pending = util::set(pending, "Attributes", #{})?; }
+    }
+    resp::json(200, pending).rewrite()?.log("info", true)
+}

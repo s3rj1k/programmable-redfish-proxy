@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Managers/{id}/Actions/Manager.Reset` and `Manager.ResetToDefaults`. The
+// emulator exposes no manager actions at all, so both 404 when relayed.
+
+// Accepted and not acted on, since there is no BMC process to restart and the
+// caller discards the body and treats any 2xx as done.
+pub async fn handle(req) {
+    log::request("info", false)?;
+    resp::status(204).log("info", true)
+}

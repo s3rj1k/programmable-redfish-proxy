@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: Unlicense
+
+// `Systems/{id}/BootOptions/{option}/Settings`. Supermicro hangs a settings
+// resource off every object, nothing is ever pending, and a write is accepted.
+
+pub async fn handle(req) {
+    log::request("info", false)?;
+
+    if req.method == "PATCH" || req.method == "PUT" {
+        return resp::status(204).log("info", true)?;
+    }
+
+    let system = util::segment(req.path, 4)?;
+    let option = util::segment(req.path, 6)?;
+
+    resp::json(200, #{
+        "@odata.id": `/redfish/v1/Systems/${system}/BootOptions/${option}/Settings`,
+        "@odata.type": "#BootOption.v1_0_4.BootOption",
+        "Id": "Settings",
+        "Name": "Boot Option Settings",
+        "BootOptionReference": option,
+        "BootOptionEnabled": true,
+    }).rewrite()?.log("info", true)
+}
